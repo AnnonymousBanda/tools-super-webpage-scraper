@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- White background -->
+  <rect width="128" height="128" fill="#FFFFFF"/>
+
+  <!-- Globe circle -->
+  <circle cx="64" cy="50" r="38" stroke="#000000" stroke-width="5" fill="none"/>
+
+  <!-- Globe horizontal line -->
+  <ellipse cx="64" cy="50" rx="38" ry="14" stroke="#000000" stroke-width="3" fill="none"/>
+
+  <!-- Globe vertical meridian -->
+  <ellipse cx="64" cy="50" rx="14" ry="38" stroke="#000000" stroke-width="3" fill="none"/>
+
+  <!-- Download arrow -->
+  <line x1="64" y1="75" x2="64" y2="110" stroke="#000000" stroke-width="6" stroke-linecap="round"/>
+  <polyline points="50,98 64,112 78,98" stroke="#000000" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Download base -->
+  <line x1="46" y1="120" x2="82" y2="120" stroke="#000000" stroke-width="6" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,359 @@
+/* ============================================
+   CSS Custom Properties - Light Theme (Default)
+   ============================================ */
+:root {
+  /* Background colors */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F9FAFB;
+
+  /* Text colors */
+  --text-primary: #000000;
+  --text-secondary: #4B5563;
+  --text-muted: #9CA3AF;
+
+  /* Button colors */
+  --btn-bg: #000000;
+  --btn-text: #FFFFFF;
+  --btn-hover: #333333;
+  --btn-active: #1a1a1a;
+  --btn-disabled-bg: #D1D5DB;
+  --btn-disabled-text: #9CA3AF;
+
+  /* Border colors */
+  --border-light: #E5E7EB;
+  --border-medium: #D1D5DB;
+
+  /* Loading/Spinner colors */
+  --spinner-track: #E5E7EB;
+  --spinner-active: #000000;
+
+  /* Success colors */
+  --success-bg: #F0FDF4;
+  --success-border: #BBF7D0;
+  --success-text: #16A34A;
+
+  /* Error colors */
+  --error-bg: #FEF2F2;
+  --error-border: #FECACA;
+  --error-text: #DC2626;
+
+  /* Icon colors */
+  --icon-markdown: #8B5CF6;
+  --icon-pdf: #EF4444;
+  --icon-images: #10B981;
+}
+
+/* ============================================
+   CSS Custom Properties - Dark Theme
+   ============================================ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Background colors */
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #242424;
+
+    /* Text colors */
+    --text-primary: #F9FAFB;
+    --text-secondary: #D1D5DB;
+    --text-muted: #9CA3AF;
+
+    /* Button colors */
+    --btn-bg: #FFFFFF;
+    --btn-text: #000000;
+    --btn-hover: #E5E7EB;
+    --btn-active: #D1D5DB;
+    --btn-disabled-bg: #4B5563;
+    --btn-disabled-text: #9CA3AF;
+
+    /* Border colors */
+    --border-light: #333333;
+    --border-medium: #404040;
+
+    /* Loading/Spinner colors */
+    --spinner-track: #404040;
+    --spinner-active: #FFFFFF;
+
+    /* Success colors */
+    --success-bg: #052e16;
+    --success-border: #166534;
+    --success-text: #4ade80;
+
+    /* Error colors */
+    --error-bg: #450a0a;
+    --error-border: #991b1b;
+    --error-text: #f87171;
+
+    /* Icon colors - brighter for dark mode */
+    --icon-markdown: #A78BFA;
+    --icon-pdf: #F87171;
+    --icon-images: #34D399;
+  }
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 300px;
+  max-width: 300px;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.container {
+  width: 300px;
+  max-width: 300px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+/* ============================================
+   Typography
+   ============================================ */
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.badge-beta {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.description {
+  font-size: 12px;
+  font-weight: 400;
+  text-align: center;
+  line-height: 1.4;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn {
+  width: 100%;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background-color: var(--btn-bg);
+  color: var(--btn-text);
+  border: none;
+  border-radius: 8px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.btn:hover:not(:disabled) {
+  background-color: var(--btn-hover);
+}
+
+.btn:active:not(:disabled) {
+  background-color: var(--btn-active);
+  transform: scale(0.98);
+}
+
+.btn:disabled {
+  background-color: var(--btn-disabled-bg);
+  color: var(--btn-disabled-text);
+  cursor: not-allowed;
+}
+
+.btn:disabled .btn-icon {
+  opacity: 0.5;
+}
+
+/* Button icons */
+.btn-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Markdown button icon - Purple */
+#save-markdown .btn-icon {
+  color: var(--icon-markdown);
+}
+
+/* PDF button icon - Red */
+#save-pdf .btn-icon {
+  color: var(--icon-pdf);
+}
+
+/* Images button icon - Green */
+#save-images .btn-icon {
+  color: var(--icon-images);
+}
+
+/* ============================================
+   Loading State
+   ============================================ */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border: 2px solid var(--spinner-track);
+  border-top-color: var(--spinner-active);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+/* ============================================
+   Unsupported Page Alert
+   ============================================ */
+.unsupported {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  text-align: center;
+}
+
+.unsupported-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.unsupported-message {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.unsupported .btn-secondary {
+  margin-top: 12px;
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-medium);
+  font-size: 12px;
+  height: 32px;
+}
+
+.unsupported .btn-secondary:hover:not(:disabled) {
+  background-color: var(--bg-secondary);
+  border-color: var(--text-secondary);
+}
+
+/* ============================================
+   Message Containers
+   ============================================ */
+.error,
+.success {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: center;
+  /* Ensure text wraps within container */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  /* Constrain width */
+  max-width: 100%;
+  width: 100%;
+}
+
+/* Error message styling */
+.error {
+  background-color: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error-text);
+}
+
+/* Success message styling */
+.success {
+  background-color: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: var(--success-text);
+}
+
+/* ============================================
+   Footer
+   ============================================ */
+.footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ============================================
+   Utilities
+   ============================================ */
+.hidden {
+  display: none !important;
+}
