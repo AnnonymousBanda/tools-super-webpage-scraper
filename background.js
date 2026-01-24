@@ -22,7 +22,7 @@ function validateUrl(url) {
     return { valid: false, error: 'No URL found. Please navigate to a webpage first.' };
   }
 
-  const restrictedSchemes = ['chrome://', 'chrome-extension://', 'about:', 'edge://', 'brave://', 'opera://'];
+  const restrictedSchemes = ['chrome://', 'chrome-extension://', 'about:', 'edge://', 'brave://', 'opera://', 'vivaldi://'];
   for (const scheme of restrictedSchemes) {
     if (url.startsWith(scheme)) {
       return { valid: false, error: 'Cannot convert browser internal pages. Navigate to a regular webpage.' };
@@ -92,34 +92,17 @@ async function broadcastStatus(tabId) {
   const operation = operationsByTabId.get(tabId);
   if (!operation) return;
 
-  // Use chrome.runtime.sendMessage but handle the case where no receiver exists
-  // In MV3, we need to check if there are any extension pages open first
+  // In Manifest V3, chrome.extension.getViews() is deprecated
+  // Use chrome.runtime.sendMessage directly and handle the error gracefully
   try {
-    const views = chrome.extension.getViews({ type: 'popup' });
-    if (views && views.length > 0) {
-      // Popup is open, send the message
-      chrome.runtime.sendMessage({
-        type: 'STATUS_UPDATE',
-        tabId: tabId,
-        operation: operation
-      }).catch(() => {
-        // Popup closed between check and send, ignore
-      });
-    }
+    await chrome.runtime.sendMessage({
+      type: 'STATUS_UPDATE',
+      tabId: tabId,
+      operation: operation
+    });
   } catch (e) {
-    // chrome.extension.getViews might not be available, try sendMessage directly
-    // but wrap in try-catch to handle "no receiving end" error
-    try {
-      chrome.runtime.sendMessage({
-        type: 'STATUS_UPDATE',
-        tabId: tabId,
-        operation: operation
-      }).catch(() => {
-        // No receiver, ignore
-      });
-    } catch (innerError) {
-      // Ignore - no popup open
-    }
+    // Expected error when no popup is open - "Could not establish connection"
+    // This is normal behavior, not an error we need to handle
   }
 }
 

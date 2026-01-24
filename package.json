@@ -1,14 +1,24 @@
 {
-  "name": "chrome-extension",
-  "version": "1.0.0",
-  "main": "config.js",
+  "name": "super-webpage-scraper",
+  "version": "1.3.0",
+  "description": "A privacy-focused Chrome extension that converts web articles to Markdown, PDF, or extracts images locally in your browser",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "chrome-extension",
+    "markdown",
+    "pdf",
+    "scraper",
+    "readability",
+    "article-extraction"
+  ],
+  "author": "MK",
   "license": "MIT",
-  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VegaStack/tools-super-webpage-scraper.git"
+  },
   "dependencies": {
     "@mozilla/readability": "^0.6.0"
   }

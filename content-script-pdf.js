@@ -557,7 +557,14 @@
     // Build metadata
     const title = article.title || document.title || 'Untitled';
     const author = article.byline || '';
-    const siteName = article.siteName || new URL(baseUrl).hostname;
+    let siteName = article.siteName || '';
+    if (!siteName) {
+      try {
+        siteName = new URL(baseUrl).hostname;
+      } catch (e) {
+        siteName = 'Unknown';
+      }
+    }
     const date = new Date().toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
