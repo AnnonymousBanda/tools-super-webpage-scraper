@@ -7,8 +7,15 @@
   // ============================================
   // Configuration
   // ============================================
-  const IMAGE_TIMEOUT = 5000; // 5 seconds per image
   const MAX_FILENAME_LENGTH = 100;
+
+  // Use shared ImageFetcher library (injected before this script)
+  const {
+    fetchImageAsBlob,
+    dataURLtoBlob,
+    getImageExtension,
+    resolveImageUrl
+  } = window.ImageFetcher || {};
 
   // ============================================
   // Utility Functions
@@ -25,52 +32,6 @@
       sanitized = sanitized.substring(0, MAX_FILENAME_LENGTH).replace(/-+$/, '');
     }
     return sanitized || 'untitled-' + Date.now();
-  }
-
-  function getFileExtension(url, contentType) {
-    const mimeToExt = {
-      'image/jpeg': 'jpg',
-      'image/jpg': 'jpg',
-      'image/png': 'png',
-      'image/gif': 'gif',
-      'image/webp': 'webp',
-      'image/svg+xml': 'svg',
-      'image/bmp': 'bmp',
-      'image/tiff': 'tiff',
-      'image/avif': 'avif',
-      'image/x-icon': 'ico',
-      'image/vnd.microsoft.icon': 'ico'
-    };
-
-    if (contentType && mimeToExt[contentType.split(';')[0]]) {
-      return mimeToExt[contentType.split(';')[0]];
-    }
-
-    try {
-      const urlObj = new URL(url);
-      const pathname = urlObj.pathname;
-      const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
-      if (match) {
-        const ext = match[1].toLowerCase();
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff', 'avif', 'ico'].includes(ext)) {
-          return ext === 'jpeg' ? 'jpg' : ext;
-        }
-      }
-    } catch (e) {
-      // Ignore URL parsing errors
-    }
-
-    return 'jpg'; // Default fallback
-  }
-
-  function resolveUrl(src, baseUrl) {
-    if (!src) return null;
-    if (src.startsWith('data:')) return src;
-    try {
-      return new URL(src, baseUrl).href;
-    } catch (e) {
-      return null;
-    }
   }
 
   // Extract best image URL from an img element (handles lazy loading patterns)
@@ -252,69 +213,6 @@
     return true;
   }
 
-  async function fetchImageAsBlob(url) {
-    // Try multiple fetch strategies for different CORS configurations
-    const strategies = [
-      { mode: 'cors', credentials: 'omit' },
-      { mode: 'cors', credentials: 'include' },
-      { mode: 'cors', credentials: 'same-origin' }
-    ];
-
-    let lastError;
-
-    for (const strategy of strategies) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), IMAGE_TIMEOUT);
-
-      try {
-        const response = await fetch(url, {
-          signal: controller.signal,
-          ...strategy
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const blob = await response.blob();
-        const contentType = response.headers.get('content-type') || '';
-
-        // Verify we got actual image data
-        if (blob.size > 0) {
-          return { blob, contentType };
-        }
-      } catch (error) {
-        clearTimeout(timeoutId);
-        lastError = error;
-        // Continue to next strategy
-      }
-    }
-
-    throw lastError || new Error('All fetch strategies failed');
-  }
-
-  // Convert data URL to blob (with error handling)
-  function dataURLtoBlob(dataURL) {
-    try {
-      const parts = dataURL.split(',');
-      if (parts.length < 2) return null;
-      const mimeMatch = parts[0].match(/:(.*?);/);
-      if (!mimeMatch) return null;
-      const mime = mimeMatch[1];
-      const bstr = atob(parts[1]);
-      let n = bstr.length;
-      const u8arr = new Uint8Array(n);
-      while (n--) {
-        u8arr[n] = bstr.charCodeAt(n);
-      }
-      return { blob: new Blob([u8arr], { type: mime }), contentType: mime };
-    } catch (e) {
-      return null;
-    }
-  }
-
   // ============================================
   // Main Extraction Logic
   // ============================================
@@ -326,6 +224,9 @@
     }
     if (typeof JSZip === 'undefined') {
       throw new Error('JSZip library not loaded');
+    }
+    if (!window.ImageFetcher) {
+      throw new Error('ImageFetcher library not loaded');
     }
 
     // Scroll through page to trigger lazy-loaded images (uses shared library)
@@ -388,7 +289,7 @@
       const src = getImageUrl(img);
       if (!src) continue;
 
-      const resolvedUrl = resolveUrl(src, baseUrl);
+      const resolvedUrl = resolveImageUrl(src, baseUrl);
       if (!resolvedUrl) continue;
 
       // Skip if already processed
@@ -403,7 +304,7 @@
       try {
         let blob, contentType;
 
-        // Handle data URLs
+        // Handle data URLs using shared library
         if (resolvedUrl.startsWith('data:')) {
           const result = dataURLtoBlob(resolvedUrl);
           if (!result) {
@@ -413,6 +314,7 @@
           blob = result.blob;
           contentType = result.contentType;
         } else {
+          // Use shared ImageFetcher (handles CORS via background script)
           const result = await fetchImageAsBlob(resolvedUrl);
           blob = result.blob;
           contentType = result.contentType;
@@ -424,7 +326,7 @@
           continue;
         }
 
-        const ext = getFileExtension(resolvedUrl, contentType);
+        const ext = getImageExtension(resolvedUrl, contentType);
         imageIndex++;
         const filename = `image-${imageIndex}.${ext}`;
 
@@ -442,7 +344,7 @@
       let errorMsg;
 
       if (failedImages.length > 0) {
-        errorMsg = `Could not download any images. ${failedImages.length} image(s) failed due to access restrictions (CORS). Found ${totalPageImages} images on page.`;
+        errorMsg = `Could not download any images. ${failedImages.length} image(s) failed (server errors or invalid URLs). Found ${totalPageImages} images on page.`;
       } else if (skippedImages.length > 0) {
         errorMsg = `No content images found. ${skippedImages.length} image(s) were skipped (icons/avatars/small). Found ${totalPageImages} images on page.`;
       } else if (images.length === 0) {

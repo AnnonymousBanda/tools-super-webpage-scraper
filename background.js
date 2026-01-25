@@ -116,6 +116,170 @@ function updateStatus(tabId, status, message) {
 }
 
 // ============================================
+// Image Fetch Handler (Bypasses CORS)
+// ============================================
+
+/**
+ * Process a successful fetch response and convert to base64
+ * @param {Response} response - The fetch response
+ * @returns {Promise<{success: boolean, data: string, contentType: string, size: number}>}
+ */
+async function processImageResponse(response) {
+  const blob = await response.blob();
+  const contentType = response.headers.get('content-type') || blob.type || 'image/jpeg';
+
+  // Verify it's actually an image (allow large non-image blobs in case content-type is wrong)
+  if (!contentType.startsWith('image/') && blob.size < 100) {
+    throw new Error('Response is not a valid image');
+  }
+
+  // Convert blob to base64 for transfer to content script
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve({
+        success: true,
+        data: reader.result,
+        contentType: contentType,
+        size: blob.size
+      });
+    };
+    reader.onerror = () => reject(new Error('Failed to read image data'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Fetch an image from the background script context
+ * This bypasses CORS restrictions because background scripts
+ * with host_permissions can fetch from any URL
+ *
+ * Uses a two-strategy approach:
+ * 1. Simple fetch with self-referral (Referer = image's own origin)
+ * 2. Fallback: fetch with no special headers
+ *
+ * @param {string} url - The image URL to fetch
+ * @param {number} timeout - Timeout in ms
+ * @param {string} pageReferer - Optional page URL for fallback
+ */
+async function fetchImageFromBackground(url, timeout = 10000, pageReferer = '') {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  // Get the image's own origin for self-referral (many CDNs accept this)
+  let imageOrigin = '';
+  try {
+    imageOrigin = new URL(url).origin;
+  } catch (e) {
+    // Invalid URL, continue without origin
+  }
+
+  // Common browser-like headers to avoid being blocked
+  // NOTE: We intentionally EXCLUDE image/avif from Accept header because:
+  // 1. jsPDF does NOT support AVIF format
+  // 2. CDNs like Framer do content negotiation and serve AVIF when requested
+  // 3. By not requesting AVIF, CDNs serve PNG/JPEG/WebP which jsPDF can handle
+  // WebP is supported by jsPDF, PNG/JPEG are universally supported
+  const browserHeaders = {
+    'Accept': 'image/png,image/jpeg,image/webp,image/apng,image/svg+xml,image/*;q=0.8,*/*;q=0.7',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Sec-Fetch-Dest': 'image',
+    'Sec-Fetch-Mode': 'no-cors',
+    'Sec-Fetch-Site': 'cross-site'
+  };
+
+  // Strategy 1: Fetch with self-referral (Referer = image's origin)
+  // This works for CDNs that check Referer for hotlink protection
+  // but allow requests from their own domain
+  if (imageOrigin) {
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        credentials: 'omit',
+        headers: {
+          ...browserHeaders,
+          'Referer': imageOrigin + '/'
+        }
+      });
+
+      if (response.ok) {
+        clearTimeout(timeoutId);
+        return await processImageResponse(response);
+      }
+    } catch (e) {
+      // Strategy 1 failed, try next
+    }
+  }
+
+  // Strategy 2: Simple fetch with browser-like headers
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      credentials: 'omit',
+      headers: browserHeaders
+    });
+
+    if (response.ok) {
+      clearTimeout(timeoutId);
+      return await processImageResponse(response);
+    }
+
+    clearTimeout(timeoutId);
+    return {
+      success: false,
+      error: `HTTP ${response.status}: ${response.statusText}`
+    };
+
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    let errorMessage = error.message;
+    if (error.name === 'AbortError') {
+      errorMessage = 'Image fetch timed out';
+    } else if (error.message.includes('Failed to fetch')) {
+      errorMessage = 'Network error - image server unreachable';
+    }
+
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+}
+
+/**
+ * Batch fetch multiple images (more efficient for many images)
+ *
+ * @param {string[]} urls - Array of image URLs to fetch
+ * @param {number} timeout - Timeout in ms
+ * @param {string} referer - Optional referer URL for CDN compatibility
+ */
+async function fetchImagesFromBackground(urls, timeout = 10000, referer = '') {
+  const results = {};
+
+  // Process in parallel with concurrency limit
+  const CONCURRENCY = 5;
+  const chunks = [];
+  for (let i = 0; i < urls.length; i += CONCURRENCY) {
+    chunks.push(urls.slice(i, i + CONCURRENCY));
+  }
+
+  for (const chunk of chunks) {
+    const promises = chunk.map(async (url) => {
+      const result = await fetchImageFromBackground(url, timeout, referer);
+      return { url, result };
+    });
+
+    const chunkResults = await Promise.all(promises);
+    for (const { url, result } of chunkResults) {
+      results[url] = result;
+    }
+  }
+
+  return results;
+}
+
+// ============================================
 // Download Handler
 // ============================================
 
@@ -138,6 +302,20 @@ async function downloadFile(dataUrl, filename) {
 // ============================================
 // Common Operation Handlers
 // ============================================
+
+/**
+ * Format file size in human-readable format (KB or MB)
+ * @param {number} sizeKB - Size in kilobytes
+ * @returns {string} - Formatted size string (e.g., "512 KB" or "1.5 MB")
+ */
+function formatFileSize(sizeKB) {
+  if (sizeKB >= 1024) {
+    const sizeMB = (sizeKB / 1024).toFixed(1);
+    // Remove trailing .0 for whole numbers
+    return sizeMB.endsWith('.0') ? `${parseInt(sizeMB)} MB` : `${sizeMB} MB`;
+  }
+  return `${sizeKB} KB`;
+}
 
 /**
  * Maps error patterns to user-friendly messages
@@ -234,12 +412,12 @@ function handleOperationSuccess(tabId, result, operationType) {
       successMsg += ` - ${result.stats.imagesFailed} images failed`;
     }
   } else if (operationType === 'pdf' && result.stats) {
-    successMsg += ` (${result.stats.sizeKB} KB)`;
+    successMsg += ` (${formatFileSize(result.stats.sizeKB)})`;
     if (result.stats.imagesFailed > 0) {
       successMsg += ` - ${result.stats.imagesFailed} images skipped`;
     }
   } else if (operationType === 'images' && result.stats) {
-    successMsg += ` (${result.stats.sizeKB} KB, ${result.stats.imagesDownloaded} images)`;
+    successMsg += ` (${formatFileSize(result.stats.sizeKB)}, ${result.stats.imagesDownloaded} images)`;
     if (result.stats.imagesFailed > 0) {
       successMsg += ` - ${result.stats.imagesFailed} failed`;
     }
@@ -295,7 +473,8 @@ async function convertToMarkdown(tabId, tabUrl) {
     // Inject libraries
     updateStatus(tabId, 'injecting', 'Loading libraries...');
     await injectLibraries(tabId, [
-      'lib/lazy-scroll.js',  // Must be first - provides triggerLazyLoading()
+      'lib/lazy-scroll.js',      // Must be first - provides triggerLazyLoading()
+      'lib/image-fetcher.js',    // Shared image fetching (CORS bypass)
       'lib/Readability.js',
       'lib/turndown.js',
       'lib/turndown-plugin-gfm.js',
@@ -303,7 +482,7 @@ async function convertToMarkdown(tabId, tabUrl) {
     ]);
 
     // Execute content script
-    updateStatus(tabId, 'processing', 'Scrolling & extracting content...');
+    updateStatus(tabId, 'processing', 'Extracting content...');
     const result = await executeContentScript(tabId, 'content-script.js');
 
     if (!result.success) {
@@ -337,17 +516,16 @@ async function convertToPDF(tabId, tabUrl) {
     }
 
     // Inject libraries
-    updateStatus(tabId, 'injecting', 'Loading libraries...');
+    updateStatus(tabId, 'injecting', 'Loading PDF libraries...');
     await injectLibraries(tabId, [
-      'lib/lazy-scroll.js',  // Must be first - provides triggerLazyLoading()
+      'lib/lazy-scroll.js',
+      'lib/image-fetcher.js',    // Shared image fetching (CORS bypass)
       'lib/Readability.js',
-      'lib/pdfmake.min.js',
-      'lib/vfs_fonts.js',
-      'lib/html-to-pdfmake.js'
+      'lib/jspdf.umd.min.js'
     ]);
 
     // Execute content script
-    updateStatus(tabId, 'processing', 'Scrolling & generating PDF...');
+    updateStatus(tabId, 'processing', 'Generating PDF...');
     const result = await executeContentScript(tabId, 'content-script-pdf.js');
 
     if (!result.success) {
@@ -383,13 +561,14 @@ async function extractImages(tabId, tabUrl) {
     // Inject libraries
     updateStatus(tabId, 'injecting', 'Loading libraries...');
     await injectLibraries(tabId, [
-      'lib/lazy-scroll.js',  // Must be first - provides triggerLazyLoading()
+      'lib/lazy-scroll.js',      // Must be first - provides triggerLazyLoading()
+      'lib/image-fetcher.js',    // Shared image fetching (CORS bypass)
       'lib/Readability.js',
       'lib/jszip.min.js'
     ]);
 
     // Execute content script
-    updateStatus(tabId, 'processing', 'Scrolling & extracting images...');
+    updateStatus(tabId, 'processing', 'Extracting images...');
     const result = await executeContentScript(tabId, 'content-script-images.js');
 
     if (!result.success) {
@@ -510,6 +689,68 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
 
     return true;
+  }
+
+  // ============================================
+  // Image Fetch Handlers (for CORS bypass)
+  // ============================================
+
+  // Single image fetch - used by content scripts to bypass CORS
+  if (message.type === 'FETCH_IMAGE') {
+    const { url, referer } = message;
+
+    if (!url) {
+      sendResponse({ success: false, error: 'No URL provided' });
+      return true;
+    }
+
+    // Skip data URLs - they don't need fetching
+    if (url.startsWith('data:')) {
+      sendResponse({ success: false, error: 'Data URLs should be handled directly' });
+      return true;
+    }
+
+    // Perform the fetch asynchronously (pass referer for CDN compatibility)
+    (async () => {
+      try {
+        const result = await fetchImageFromBackground(url, 10000, referer || '');
+        sendResponse(result);
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+
+    return true; // Keep channel open for async response
+  }
+
+  // Batch image fetch - more efficient for multiple images
+  if (message.type === 'FETCH_IMAGES_BATCH') {
+    const { urls, referer } = message;
+
+    if (!urls || !Array.isArray(urls) || urls.length === 0) {
+      sendResponse({ success: false, error: 'No URLs provided' });
+      return true;
+    }
+
+    // Filter out data URLs
+    const httpUrls = urls.filter(url => !url.startsWith('data:'));
+
+    if (httpUrls.length === 0) {
+      sendResponse({ success: true, results: {} });
+      return true;
+    }
+
+    // Perform batch fetch asynchronously (pass referer for CDN compatibility)
+    (async () => {
+      try {
+        const results = await fetchImagesFromBackground(httpUrls, 10000, referer || '');
+        sendResponse({ success: true, results });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+
+    return true; // Keep channel open for async response
   }
 
   // Always return false for unhandled messages

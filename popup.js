@@ -297,6 +297,10 @@ const handleSaveImages = () => startConversion('images');
 // ============================================
 
 async function init() {
+  // Set version from manifest
+  const manifest = chrome.runtime.getManifest();
+  document.getElementById('version-text').textContent = `v${manifest.version}`;
+
   // Attach event listeners
   document.getElementById('save-markdown').addEventListener('click', handleSaveMarkdown);
   document.getElementById('save-pdf').addEventListener('click', handleSavePDF);

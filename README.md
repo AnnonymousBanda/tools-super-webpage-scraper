@@ -9,16 +9,17 @@ A privacy-focused Chrome extension that converts web articles to Markdown, PDF, 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-success)
 ![License](https://img.shields.io/badge/License-MIT-blue)
-![Version](https://img.shields.io/badge/Version-1.4.0-orange)
+![Version](https://img.shields.io/badge/Version-1.5.0-orange)
 
 ## Features
 
 - **Markdown Export** - Clean markdown with YAML frontmatter, bundled with images in a ZIP file
-- **PDF Export** - Professional PDFs with proper typography, code blocks, tables, and images
+- **PDF Export** - Professional PDFs with selectable text, proper typography, code blocks, tables, and images
 - **Image Extraction** - Download all article images as a ZIP archive
 - **Concurrent Operations** - Run exports on multiple tabs simultaneously
 - **Lazy Loading Support** - Automatically scrolls pages to capture lazy-loaded images
 - **Smart Article Detection** - Identifies article content vs web apps to warn about incompatible pages
+- **CDN Compatibility** - Works with modern image CDNs (Framer, Cloudinary, etc.) via smart content negotiation
 - **Dark/Light Mode** - UI adapts to system color scheme
 - **100% Local Processing** - All conversion happens in your browser
 
@@ -53,22 +54,21 @@ A privacy-focused Chrome extension that converts web articles to Markdown, PDF, 
 
 ```
 tools-super-webpage-scraper/
-├── manifest.json            # Extension configuration (Manifest V3)
-├── background.js            # Service worker - orchestrates operations
-├── popup.html/js/css        # Extension popup UI
-├── content-script.js        # Markdown conversion logic
-├── content-script-pdf.js    # PDF generation logic
-├── content-script-images.js # Image extraction logic
+├── manifest.json              # Extension configuration (Manifest V3)
+├── background.js              # Service worker - orchestrates operations, handles CORS
+├── popup.html/js/css          # Extension popup UI
+├── content-script.js          # Markdown conversion logic
+├── content-script-pdf.js      # PDF generation with jsPDF
+├── content-script-images.js   # Image extraction logic
 └── lib/
-    ├── Readability.js       # Mozilla's article extractor
-    ├── turndown.js          # HTML to Markdown converter
+    ├── Readability.js         # Mozilla's article extractor
+    ├── turndown.js            # HTML to Markdown converter
     ├── turndown-plugin-gfm.js # GitHub Flavored Markdown support
-    ├── pdfmake.min.js       # PDF generation library
-    ├── html-to-pdfmake.js   # HTML to pdfMake conversion
-    ├── jszip.min.js         # ZIP file creation
-    ├── vfs_fonts.js         # Font data for PDF rendering
-    ├── lazy-scroll.js       # Lazy loading trigger utility
-    └── article-detector.js  # Article vs web app detection
+    ├── jspdf.umd.min.js       # Client-side PDF generation
+    ├── jszip.min.js           # ZIP file creation
+    ├── image-fetcher.js       # Shared CORS-bypassing image fetcher
+    ├── lazy-scroll.js         # Lazy loading trigger utility
+    └── article-detector.js    # Article vs web app detection
 ```
 
 ### Processing Flow
@@ -78,7 +78,17 @@ tools-super-webpage-scraper/
 3. **Content Extraction** - Uses Mozilla Readability to extract clean article content
 4. **Conversion** - Transforms content to the chosen format (Markdown/PDF)
 5. **Image Processing** - Downloads and embeds images with CORS fallback strategies
-6. **Packaging** - Creates downloadable ZIP or PDF file
+6. **Format Optimization** - JPEG/PNG pass through directly; WebP/AVIF converted to JPEG for compatibility
+7. **Packaging** - Creates downloadable ZIP or PDF file
+
+### Image Fetching Strategy
+
+The extension uses a multi-layer approach for reliable image fetching:
+
+1. **Direct Fetch** - Attempts same-origin or CORS-enabled fetch first
+2. **Background Script Bypass** - Falls back to background script with `host_permissions` for cross-origin images
+3. **Smart Accept Headers** - Excludes AVIF from Accept header to ensure CDN compatibility (jsPDF doesn't support AVIF)
+4. **Format-Aware Processing** - JPEG/PNG preserved as-is; WebP/AVIF converted to JPEG (85% quality) for optimal file size
 
 ### Concurrent Per-Tab Operations
 
@@ -111,11 +121,15 @@ article-title.zip
 
 ### PDF Features
 - A4 page format with proper margins
-- Styled headings (H1-H6)
-- Code blocks with syntax highlighting background
-- Table formatting with borders
-- Embedded images (auto-scaled to fit)
+- **Selectable text** - Copy/paste text from generated PDFs
+- **Emoji support** - Full emoji rendering via canvas fallback
+- Styled headings (H1-H6) with proper hierarchy
+- Code blocks with monospace font and gray background
+- Table formatting with borders and cell padding
+- Embedded images (auto-scaled to fit page width)
+- Link embed cards for bookmark-style links
 - Page numbers and source URL in footer
+- **Optimized file size** - Native formats preserved, minimal conversions
 
 ## Dependencies
 
@@ -126,8 +140,7 @@ article-title.zip
 | [@mozilla/readability](https://github.com/mozilla/readability) | 0.6.0 | Article content extraction |
 | [Turndown](https://github.com/mixmark-io/turndown) | 7.x | HTML to Markdown conversion |
 | [joplin-turndown-plugin-gfm](https://github.com/laurent22/joplin-turndown-plugin-gfm) | 1.0.12 | GitHub Flavored Markdown support |
-| [pdfMake](https://pdfmake.github.io/docs/) | 0.3.3 | Client-side PDF generation |
-| [html-to-pdfmake](https://github.com/Aymkdn/html-to-pdfmake) | 2.x | HTML to pdfMake conversion |
+| [jsPDF](https://github.com/parallax/jsPDF) | 2.5.2 | Client-side PDF generation |
 | [JSZip](https://stuk.github.io/jszip/) | 3.10.1 | ZIP file creation |
 
 ## Permissions
@@ -138,7 +151,7 @@ article-title.zip
 | `scripting` | Inject content scripts for extraction |
 | `downloads` | Save generated files |
 | `alarms` | Keep service worker alive during long operations |
-| `<all_urls>` | Fetch images from any domain |
+| `<all_urls>` | Fetch images from any domain (CORS bypass) |
 
 ## Browser Compatibility
 
@@ -151,7 +164,7 @@ article-title.zip
 ## Limitations
 
 - **Web Apps** - Cannot extract content from interactive applications (Gmail, Figma, etc.)
-- **CORS Restrictions** - Some images may fail to download due to server restrictions
+- **CORS Restrictions** - Most cross-origin images work via background script bypass, but some heavily restricted servers may fail
 - **Dynamic Content** - Single-page apps with client-side routing may have extraction issues
 - **Login-Required Content** - Cannot access paywalled or authenticated content
 - **Very Long Articles** - PDF generation may timeout for extremely long content
@@ -172,6 +185,7 @@ npm install
 2. Navigate to various article pages
 3. Test each export format
 4. Verify concurrent operations work across multiple tabs
+5. Test with CDN-hosted images (Framer, Cloudinary, etc.)
 
 ## Privacy
 
@@ -200,4 +214,4 @@ Contributions are welcome! Please:
 
 - [Mozilla Readability](https://github.com/mozilla/readability) - The core article extraction algorithm
 - [Turndown](https://github.com/mixmark-io/turndown) - Excellent HTML to Markdown conversion
-- [pdfMake](https://pdfmake.github.io/docs/) - Client-side PDF generation made easy
+- [jsPDF](https://github.com/parallax/jsPDF) - Lightweight client-side PDF generation

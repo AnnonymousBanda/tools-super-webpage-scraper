@@ -7,8 +7,10 @@
   // ============================================
   // Configuration
   // ============================================
-  const IMAGE_TIMEOUT = 5000; // 5 seconds per image
   const MAX_FILENAME_LENGTH = 100;
+
+  // Use shared ImageFetcher library (injected before this script)
+  const { fetchImageAsBlob, getImageExtension, resolveImageUrl } = window.ImageFetcher || {};
 
   // ============================================
   // Utility Functions
@@ -29,93 +31,6 @@
       sanitized = sanitized.substring(0, MAX_FILENAME_LENGTH).replace(/-+$/, '');
     }
     return sanitized || 'untitled-' + Date.now();
-  }
-
-  function getFileExtension(url, contentType) {
-    // Try to get extension from content type first
-    const mimeToExt = {
-      'image/jpeg': 'jpg',
-      'image/jpg': 'jpg',
-      'image/png': 'png',
-      'image/gif': 'gif',
-      'image/webp': 'webp',
-      'image/svg+xml': 'svg',
-      'image/bmp': 'bmp',
-      'image/tiff': 'tiff',
-      'image/avif': 'avif'
-    };
-
-    if (contentType && mimeToExt[contentType.split(';')[0]]) {
-      return mimeToExt[contentType.split(';')[0]];
-    }
-
-    // Try to extract from URL
-    try {
-      const urlObj = new URL(url);
-      const pathname = urlObj.pathname;
-      const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
-      if (match) {
-        const ext = match[1].toLowerCase();
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff', 'avif'].includes(ext)) {
-          return ext === 'jpeg' ? 'jpg' : ext;
-        }
-      }
-    } catch (e) {
-      // Ignore URL parsing errors
-    }
-
-    return 'jpg'; // Default fallback
-  }
-
-  function resolveUrl(src, baseUrl) {
-    if (!src) return null;
-    if (src.startsWith('data:')) return src; // Keep data URLs as-is
-    try {
-      return new URL(src, baseUrl).href;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async function fetchImageAsBlob(url) {
-    // Try multiple fetch strategies for different CORS configurations
-    const strategies = [
-      { mode: 'cors', credentials: 'omit' },
-      { mode: 'cors', credentials: 'include' },
-      { mode: 'cors', credentials: 'same-origin' }
-    ];
-
-    let lastError;
-
-    for (const strategy of strategies) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), IMAGE_TIMEOUT);
-
-      try {
-        const response = await fetch(url, {
-          signal: controller.signal,
-          ...strategy
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const blob = await response.blob();
-        const contentType = response.headers.get('content-type') || '';
-
-        if (blob.size > 0) {
-          return { blob, contentType };
-        }
-      } catch (error) {
-        clearTimeout(timeoutId);
-        lastError = error;
-      }
-    }
-
-    throw lastError || new Error('All fetch strategies failed');
   }
 
   // Extract best image URL from an img element
@@ -166,7 +81,7 @@
   // ============================================
 
   try {
-    // Check if Readability is loaded
+    // Check if required libraries are loaded
     if (typeof Readability === 'undefined') {
       throw new Error('Readability library not loaded');
     }
@@ -175,6 +90,9 @@
     }
     if (typeof JSZip === 'undefined') {
       throw new Error('JSZip library not loaded');
+    }
+    if (!window.ImageFetcher) {
+      throw new Error('ImageFetcher library not loaded');
     }
 
     // Scroll through page to trigger lazy-loaded images (uses shared library)
@@ -204,7 +122,7 @@
     container.innerHTML = article.content;
 
     // ============================================
-    // Image Processing
+    // Image Processing (using shared ImageFetcher)
     // ============================================
 
     const images = container.querySelectorAll('img');
@@ -217,7 +135,7 @@
       const src = getImageUrl(img);
       if (!src) continue;
 
-      const resolvedUrl = resolveUrl(src, baseUrl);
+      const resolvedUrl = resolveImageUrl(src, baseUrl);
       if (!resolvedUrl) continue;
 
       // Skip data URLs - they'll stay inline
@@ -233,6 +151,7 @@
       }
 
       try {
+        // Use shared ImageFetcher (handles CORS via background script)
         const { blob, contentType } = await fetchImageAsBlob(resolvedUrl);
 
         // Skip very small images (likely tracking pixels)
@@ -240,7 +159,7 @@
           continue;
         }
 
-        const ext = getFileExtension(resolvedUrl, contentType);
+        const ext = getImageExtension(resolvedUrl, contentType);
         imageIndex++;
         const filename = `img${imageIndex}.${ext}`;
 

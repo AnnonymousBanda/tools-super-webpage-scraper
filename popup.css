@@ -359,6 +359,45 @@ body {
   text-align: center;
 }
 
+.footer-author {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footer-author:hover {
+  color: var(--text-primary);
+}
+
+.footer-links {
+  margin-top: 8px;
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.footer-links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footer-links a:hover {
+  color: var(--text-primary);
+}
+
+.footer-links .github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.footer-links .github-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
 /* ============================================
    Utilities
    ============================================ */
