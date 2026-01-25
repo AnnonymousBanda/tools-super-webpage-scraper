@@ -244,7 +244,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Event Handlers
 // ============================================
 
-async function handleSaveMarkdown() {
+/**
+ * Generic handler for starting a conversion operation
+ * @param {string} conversionType - Type of conversion (markdown, pdf, images)
+ */
+async function startConversion(conversionType) {
   clearMessages();
 
   try {
@@ -259,7 +263,7 @@ async function handleSaveMarkdown() {
 
     const response = await sendMessageToBackground({
       type: 'START_CONVERSION',
-      conversionType: 'markdown',
+      conversionType,
       tabId: tab.id,
       tabUrl: tab.url
     });
@@ -270,78 +274,23 @@ async function handleSaveMarkdown() {
     }
 
     if (!response.success) {
-      showError(response.error || 'Failed to start conversion.');
+      const errorMsg = conversionType === 'images'
+        ? 'Failed to start extraction.'
+        : 'Failed to start conversion.';
+      showError(response.error || errorMsg);
     }
   } catch (error) {
-    showError(error.message || 'Failed to start conversion.');
+    const errorMsg = conversionType === 'images'
+      ? 'Failed to start extraction.'
+      : 'Failed to start conversion.';
+    showError(error.message || errorMsg);
   }
 }
 
-async function handleSavePDF() {
-  clearMessages();
-
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    if (!tab) {
-      showError('No active tab found. Please try again.');
-      return;
-    }
-
-    showLoading('Starting...');
-
-    const response = await sendMessageToBackground({
-      type: 'START_CONVERSION',
-      conversionType: 'pdf',
-      tabId: tab.id,
-      tabUrl: tab.url
-    });
-
-    if (response === null) {
-      showError('Extension error. Please reload the extension and try again.');
-      return;
-    }
-
-    if (!response.success) {
-      showError(response.error || 'Failed to start conversion.');
-    }
-  } catch (error) {
-    showError(error.message || 'Failed to start conversion.');
-  }
-}
-
-async function handleSaveImages() {
-  clearMessages();
-
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    if (!tab) {
-      showError('No active tab found. Please try again.');
-      return;
-    }
-
-    showLoading('Starting...');
-
-    const response = await sendMessageToBackground({
-      type: 'START_CONVERSION',
-      conversionType: 'images',
-      tabId: tab.id,
-      tabUrl: tab.url
-    });
-
-    if (response === null) {
-      showError('Extension error. Please reload the extension and try again.');
-      return;
-    }
-
-    if (!response.success) {
-      showError(response.error || 'Failed to start extraction.');
-    }
-  } catch (error) {
-    showError(error.message || 'Failed to start extraction.');
-  }
-}
+// Specific handlers that use the generic function
+const handleSaveMarkdown = () => startConversion('markdown');
+const handleSavePDF = () => startConversion('pdf');
+const handleSaveImages = () => startConversion('images');
 
 // ============================================
 // Initialization

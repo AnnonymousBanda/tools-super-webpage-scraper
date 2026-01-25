@@ -24,15 +24,15 @@ A privacy-focused Chrome extension that converts web articles to Markdown, PDF, 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/tools-webpages-scraper.git
-   cd tools-webpages-scraper
+   git clone https://github.com/VegaStack/tools-super-webpage-scraper.git
+   cd tools-super-webpage-scraper
    ```
 
 2. Open Chrome and navigate to `chrome://extensions/`
 
 3. Enable **Developer mode** (toggle in top right)
 
-4. Click **Load unpacked** and select the `chrome-extension` folder
+4. Click **Load unpacked** and select the repository folder
 
 ### Usage
 
@@ -48,20 +48,23 @@ A privacy-focused Chrome extension that converts web articles to Markdown, PDF, 
 ### Architecture
 
 ```
-chrome-extension/
-├── manifest.json          # Extension configuration (Manifest V3)
-├── background.js          # Service worker - orchestrates operations
-├── popup.html/js/css      # Extension popup UI
-├── content-script.js      # Markdown conversion logic
-├── content-script-pdf.js  # PDF generation logic
+tools-super-webpage-scraper/
+├── manifest.json            # Extension configuration (Manifest V3)
+├── background.js            # Service worker - orchestrates operations
+├── popup.html/js/css        # Extension popup UI
+├── content-script.js        # Markdown conversion logic
+├── content-script-pdf.js    # PDF generation logic
 ├── content-script-images.js # Image extraction logic
 └── lib/
-    ├── Readability.js     # Mozilla's article extractor
-    ├── turndown.js        # HTML to Markdown converter
-    ├── pdfmake.min.js     # PDF generation library
-    ├── jszip.min.js       # ZIP file creation
-    ├── lazy-scroll.js     # Lazy loading trigger utility
-    └── article-detector.js # Article vs web app detection
+    ├── Readability.js       # Mozilla's article extractor
+    ├── turndown.js          # HTML to Markdown converter
+    ├── turndown-plugin-gfm.js # GitHub Flavored Markdown support
+    ├── pdfmake.min.js       # PDF generation library
+    ├── html-to-pdfmake.js   # HTML to pdfMake conversion
+    ├── jszip.min.js         # ZIP file creation
+    ├── vfs_fonts.js         # Font data for PDF rendering
+    ├── lazy-scroll.js       # Lazy loading trigger utility
+    └── article-detector.js  # Article vs web app detection
 ```
 
 ### Processing Flow
@@ -154,7 +157,8 @@ article-title.zip
 ### Project Setup
 
 ```bash
-cd chrome-extension
+git clone https://github.com/VegaStack/tools-super-webpage-scraper.git
+cd tools-super-webpage-scraper
 npm install
 ```
 
