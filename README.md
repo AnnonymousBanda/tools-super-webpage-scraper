@@ -1,5 +1,9 @@
 # Super Webpage Scraper
 
+<p align="center">
+  <img src="icons/super-webpage-scraper-logo.png" alt="Super Webpage Scraper Logo" width="100">
+</p>
+
 A privacy-focused Chrome extension that converts web articles to Markdown, PDF, or extracts images - all processed locally in your browser. No data ever leaves your device.
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
