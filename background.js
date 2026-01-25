@@ -218,13 +218,18 @@ async function convertToMarkdown(tabId, tabUrl) {
   } catch (error) {
     let errorMessage = error.message;
 
+    // Provide actionable error messages based on error type
     if (error.message.includes('Cannot access') ||
         error.message.includes('Cannot read') ||
         error.message.includes('No tab')) {
-      errorMessage = 'Cannot access this page. Try a different webpage.';
+      errorMessage = 'Cannot access this page. Please refresh and try again, or try a different webpage.';
     } else if (error.message.includes('Script execution failed') ||
                error.message.includes('No frame with id')) {
-      errorMessage = 'Could not run extraction script. The page may be restricted.';
+      errorMessage = 'Could not run on this page. Try refreshing the page or use a different article.';
+    } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+      errorMessage = 'Operation timed out. The page may be too large. Try a shorter article.';
+    } else if (error.message.includes('memory') || error.message.includes('Memory')) {
+      errorMessage = 'Not enough memory. Try closing other tabs and retry.';
     }
 
     const operation = operationsByTabId.get(tabId);
@@ -315,13 +320,18 @@ async function convertToPDF(tabId, tabUrl) {
   } catch (error) {
     let errorMessage = error.message;
 
+    // Provide actionable error messages based on error type
     if (error.message.includes('Cannot access') ||
         error.message.includes('Cannot read') ||
         error.message.includes('No tab')) {
-      errorMessage = 'Cannot access this page. Try a different webpage.';
+      errorMessage = 'Cannot access this page. Please refresh and try again, or try a different webpage.';
     } else if (error.message.includes('Script execution failed') ||
                error.message.includes('No frame with id')) {
-      errorMessage = 'Could not run PDF script. The page may be restricted.';
+      errorMessage = 'Could not generate PDF on this page. Try refreshing or use a different article.';
+    } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+      errorMessage = 'PDF generation timed out. The article may be too long. Try a shorter article.';
+    } else if (error.message.includes('memory') || error.message.includes('Memory')) {
+      errorMessage = 'Not enough memory for PDF. Try closing other tabs and retry.';
     }
 
     const operation = operationsByTabId.get(tabId);
@@ -414,13 +424,18 @@ async function extractImages(tabId, tabUrl) {
   } catch (error) {
     let errorMessage = error.message;
 
+    // Provide actionable error messages based on error type
     if (error.message.includes('Cannot access') ||
         error.message.includes('Cannot read') ||
         error.message.includes('No tab')) {
-      errorMessage = 'Cannot access this page. Try a different webpage.';
+      errorMessage = 'Cannot access this page. Please refresh and try again, or try a different webpage.';
     } else if (error.message.includes('Script execution failed') ||
                error.message.includes('No frame with id')) {
-      errorMessage = 'Could not run extraction script. The page may be restricted.';
+      errorMessage = 'Could not extract images from this page. Try refreshing or use a different article.';
+    } else if (error.message.includes('CORS') || error.message.includes('cross-origin')) {
+      errorMessage = 'Some images could not be downloaded due to server restrictions (CORS).';
+    } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+      errorMessage = 'Image extraction timed out. Try again or use a page with fewer images.';
     }
 
     const operation = operationsByTabId.get(tabId);

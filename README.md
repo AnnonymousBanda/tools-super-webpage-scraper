@@ -5,7 +5,7 @@ A privacy-focused Chrome extension that converts web articles to Markdown, PDF, 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-success)
 ![License](https://img.shields.io/badge/License-MIT-blue)
-![Version](https://img.shields.io/badge/Version-1.3.0-orange)
+![Version](https://img.shields.io/badge/Version-1.4.0-orange)
 
 ## Features
 
@@ -117,11 +117,11 @@ article-title.zip
 | Library | Version | Purpose |
 |---------|---------|---------|
 | [@mozilla/readability](https://github.com/mozilla/readability) | 0.6.0 | Article content extraction |
-| [Turndown](https://github.com/mixmark-io/turndown) | - | HTML to Markdown conversion |
-| [Turndown GFM Plugin](https://github.com/mixmark-io/turndown-plugin-gfm) | - | GitHub Flavored Markdown support |
-| [pdfMake](https://pdfmake.github.io/docs/) | - | Client-side PDF generation |
-| [html-to-pdfmake](https://github.com/Aymkdn/html-to-pdfmake) | - | HTML to pdfMake conversion |
-| [JSZip](https://stuk.github.io/jszip/) | - | ZIP file creation |
+| [Turndown](https://github.com/mixmark-io/turndown) | 7.x | HTML to Markdown conversion |
+| [joplin-turndown-plugin-gfm](https://github.com/laurent22/joplin-turndown-plugin-gfm) | 1.0.12 | GitHub Flavored Markdown support |
+| [pdfMake](https://pdfmake.github.io/docs/) | 0.3.3 | Client-side PDF generation |
+| [html-to-pdfmake](https://github.com/Aymkdn/html-to-pdfmake) | 2.x | HTML to pdfMake conversion |
+| [JSZip](https://stuk.github.io/jszip/) | 3.10.1 | ZIP file creation |
 
 ## Permissions
 
