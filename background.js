@@ -136,6 +136,149 @@ async function downloadFile(dataUrl, filename) {
 }
 
 // ============================================
+// Common Operation Handlers
+// ============================================
+
+/**
+ * Maps error patterns to user-friendly messages
+ */
+const ERROR_MAPPINGS = {
+  access: {
+    patterns: ['Cannot access', 'Cannot read', 'No tab'],
+    message: 'Cannot access this page. Please refresh and try again, or try a different webpage.'
+  },
+  script: {
+    patterns: ['Script execution failed', 'No frame with id'],
+    messages: {
+      markdown: 'Could not run on this page. Try refreshing the page or use a different article.',
+      pdf: 'Could not generate PDF on this page. Try refreshing or use a different article.',
+      images: 'Could not extract images from this page. Try refreshing or use a different article.'
+    }
+  },
+  timeout: {
+    patterns: ['timeout', 'Timeout'],
+    messages: {
+      markdown: 'Operation timed out. The page may be too large. Try a shorter article.',
+      pdf: 'PDF generation timed out. The article may be too long. Try a shorter article.',
+      images: 'Image extraction timed out. Try again or use a page with fewer images.'
+    }
+  },
+  memory: {
+    patterns: ['memory', 'Memory'],
+    message: 'Not enough memory. Try closing other tabs and retry.'
+  },
+  cors: {
+    patterns: ['CORS', 'cross-origin'],
+    message: 'Some images could not be downloaded due to server restrictions (CORS).'
+  }
+};
+
+/**
+ * Get user-friendly error message based on error type and operation
+ */
+function getErrorMessage(error, operationType) {
+  const errorMsg = error.message || '';
+
+  for (const [, mapping] of Object.entries(ERROR_MAPPINGS)) {
+    const matches = mapping.patterns.some(p => errorMsg.includes(p));
+    if (matches) {
+      // Return type-specific message if available, otherwise generic
+      if (mapping.messages) {
+        return mapping.messages[operationType] || mapping.messages.markdown;
+      }
+      return mapping.message;
+    }
+  }
+
+  return errorMsg;
+}
+
+/**
+ * Handle operation error and update state
+ */
+function handleOperationError(error, tabId, operationType) {
+  const errorMessage = getErrorMessage(error, operationType);
+
+  const operation = operationsByTabId.get(tabId);
+  if (operation) {
+    operation.status = 'error';
+    operation.error = errorMessage;
+    operation.message = errorMessage;
+    broadcastStatus(tabId);
+  }
+  resetOperation(tabId);
+}
+
+/**
+ * Handle successful operation completion
+ */
+function handleOperationSuccess(tabId, result, operationType) {
+  const operation = operationsByTabId.get(tabId);
+  if (!operation) return;
+
+  operation.status = 'completed';
+  operation.result = {
+    filename: result.filename,
+    stats: result.stats
+  };
+
+  // Build success message based on operation type
+  let successMsg = `Downloaded: ${result.filename}`;
+
+  if (operationType === 'markdown' && result.stats) {
+    const imgInfo = result.stats.imagesDownloaded > 0
+      ? ` (${result.stats.imagesDownloaded} images)`
+      : ' (no images)';
+    successMsg += imgInfo;
+    if (result.stats.imagesFailed > 0) {
+      successMsg += ` - ${result.stats.imagesFailed} images failed`;
+    }
+  } else if (operationType === 'pdf' && result.stats) {
+    successMsg += ` (${result.stats.sizeKB} KB)`;
+    if (result.stats.imagesFailed > 0) {
+      successMsg += ` - ${result.stats.imagesFailed} images skipped`;
+    }
+  } else if (operationType === 'images' && result.stats) {
+    successMsg += ` (${result.stats.sizeKB} KB, ${result.stats.imagesDownloaded} images)`;
+    if (result.stats.imagesFailed > 0) {
+      successMsg += ` - ${result.stats.imagesFailed} failed`;
+    }
+  }
+
+  operation.message = successMsg;
+  broadcastStatus(tabId);
+  resetOperation(tabId);
+}
+
+/**
+ * Inject libraries into a tab
+ */
+async function injectLibraries(tabId, libraries) {
+  for (const lib of libraries) {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [lib]
+    });
+  }
+}
+
+/**
+ * Execute content script and get result
+ */
+async function executeContentScript(tabId, scriptFile) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    files: [scriptFile]
+  });
+
+  if (!results || results.length === 0 || !results[0].result) {
+    throw new Error('Script execution failed. Please try again.');
+  }
+
+  return results[0].result;
+}
+
+// ============================================
 // Markdown Conversion
 // ============================================
 
@@ -151,35 +294,17 @@ async function convertToMarkdown(tabId, tabUrl) {
 
     // Inject libraries
     updateStatus(tabId, 'injecting', 'Loading libraries...');
-
-    const libraries = [
+    await injectLibraries(tabId, [
       'lib/lazy-scroll.js',  // Must be first - provides triggerLazyLoading()
       'lib/Readability.js',
       'lib/turndown.js',
       'lib/turndown-plugin-gfm.js',
       'lib/jszip.min.js'
-    ];
-
-    for (const lib of libraries) {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: [lib]
-      });
-    }
+    ]);
 
     // Execute content script
     updateStatus(tabId, 'processing', 'Scrolling & extracting content...');
-
-    const results = await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content-script.js']
-    });
-
-    if (!results || results.length === 0 || !results[0].result) {
-      throw new Error('Script execution failed. Please try again.');
-    }
-
-    const result = results[0].result;
+    const result = await executeContentScript(tabId, 'content-script.js');
 
     if (!result.success) {
       throw new Error(result.error || 'Failed to extract article content.');
@@ -187,54 +312,13 @@ async function convertToMarkdown(tabId, tabUrl) {
 
     // Download the file
     updateStatus(tabId, 'downloading', 'Downloading ZIP...');
-
     await downloadFile(result.zipData, result.filename);
 
-    // Success
-    const operation = operationsByTabId.get(tabId);
-    if (operation) {
-      operation.status = 'completed';
-      operation.result = {
-        filename: result.filename,
-        stats: result.stats
-      };
-
-      let successMsg = `Downloaded: ${result.filename}`;
-      if (result.stats) {
-        const imgInfo = result.stats.imagesDownloaded > 0
-          ? ` (${result.stats.imagesDownloaded} images)`
-          : ' (no images)';
-        successMsg += imgInfo;
-        if (result.stats.imagesFailed > 0) {
-          successMsg += ` - ${result.stats.imagesFailed} images failed`;
-        }
-      }
-      operation.message = successMsg;
-
-      broadcastStatus(tabId);
-    }
-    resetOperation(tabId);
+    // Handle success
+    handleOperationSuccess(tabId, result, 'markdown');
 
   } catch (error) {
-    let errorMessage = error.message;
-
-    if (error.message.includes('Cannot access') ||
-        error.message.includes('Cannot read') ||
-        error.message.includes('No tab')) {
-      errorMessage = 'Cannot access this page. Try a different webpage.';
-    } else if (error.message.includes('Script execution failed') ||
-               error.message.includes('No frame with id')) {
-      errorMessage = 'Could not run extraction script. The page may be restricted.';
-    }
-
-    const operation = operationsByTabId.get(tabId);
-    if (operation) {
-      operation.status = 'error';
-      operation.error = errorMessage;
-      operation.message = errorMessage;
-      broadcastStatus(tabId);
-    }
-    resetOperation(tabId);
+    handleOperationError(error, tabId, 'markdown');
   }
 }
 
@@ -254,35 +338,17 @@ async function convertToPDF(tabId, tabUrl) {
 
     // Inject libraries
     updateStatus(tabId, 'injecting', 'Loading libraries...');
-
-    const libraries = [
+    await injectLibraries(tabId, [
       'lib/lazy-scroll.js',  // Must be first - provides triggerLazyLoading()
       'lib/Readability.js',
       'lib/pdfmake.min.js',
       'lib/vfs_fonts.js',
       'lib/html-to-pdfmake.js'
-    ];
-
-    for (const lib of libraries) {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: [lib]
-      });
-    }
+    ]);
 
     // Execute content script
     updateStatus(tabId, 'processing', 'Scrolling & generating PDF...');
-
-    const results = await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content-script-pdf.js']
-    });
-
-    if (!results || results.length === 0 || !results[0].result) {
-      throw new Error('Script execution failed. Please try again.');
-    }
-
-    const result = results[0].result;
+    const result = await executeContentScript(tabId, 'content-script-pdf.js');
 
     if (!result.success) {
       throw new Error(result.error || 'Failed to generate PDF.');
@@ -290,48 +356,13 @@ async function convertToPDF(tabId, tabUrl) {
 
     // Download the file
     updateStatus(tabId, 'downloading', 'Downloading PDF...');
-
     await downloadFile(result.pdfData, result.filename);
 
-    // Success
-    const operation = operationsByTabId.get(tabId);
-    if (operation) {
-      operation.status = 'completed';
-      operation.result = {
-        filename: result.filename,
-        stats: result.stats
-      };
-
-      let successMsg = `Downloaded: ${result.filename} (${result.stats.sizeKB} KB)`;
-      if (result.stats.imagesFailed > 0) {
-        successMsg += ` - ${result.stats.imagesFailed} images skipped`;
-      }
-      operation.message = successMsg;
-
-      broadcastStatus(tabId);
-    }
-    resetOperation(tabId);
+    // Handle success
+    handleOperationSuccess(tabId, result, 'pdf');
 
   } catch (error) {
-    let errorMessage = error.message;
-
-    if (error.message.includes('Cannot access') ||
-        error.message.includes('Cannot read') ||
-        error.message.includes('No tab')) {
-      errorMessage = 'Cannot access this page. Try a different webpage.';
-    } else if (error.message.includes('Script execution failed') ||
-               error.message.includes('No frame with id')) {
-      errorMessage = 'Could not run PDF script. The page may be restricted.';
-    }
-
-    const operation = operationsByTabId.get(tabId);
-    if (operation) {
-      operation.status = 'error';
-      operation.error = errorMessage;
-      operation.message = errorMessage;
-      broadcastStatus(tabId);
-    }
-    resetOperation(tabId);
+    handleOperationError(error, tabId, 'pdf');
   }
 }
 
@@ -340,11 +371,7 @@ async function convertToPDF(tabId, tabUrl) {
 // ============================================
 
 async function extractImages(tabId, tabUrl) {
-  try {
-    startOperation('images', tabId);
-  } catch (e) {
-    console.error('Failed to start operation:', e);
-  }
+  startOperation('images', tabId);
 
   try {
     // Validate URL
@@ -355,33 +382,15 @@ async function extractImages(tabId, tabUrl) {
 
     // Inject libraries
     updateStatus(tabId, 'injecting', 'Loading libraries...');
-
-    const libraries = [
+    await injectLibraries(tabId, [
       'lib/lazy-scroll.js',  // Must be first - provides triggerLazyLoading()
       'lib/Readability.js',
       'lib/jszip.min.js'
-    ];
-
-    for (const lib of libraries) {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: [lib]
-      });
-    }
+    ]);
 
     // Execute content script
     updateStatus(tabId, 'processing', 'Scrolling & extracting images...');
-
-    const results = await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content-script-images.js']
-    });
-
-    if (!results || results.length === 0 || !results[0].result) {
-      throw new Error('Script execution failed. Please try again.');
-    }
-
-    const result = results[0].result;
+    const result = await executeContentScript(tabId, 'content-script-images.js');
 
     if (!result.success) {
       throw new Error(result.error || 'Failed to extract images.');
@@ -389,48 +398,13 @@ async function extractImages(tabId, tabUrl) {
 
     // Download the file
     updateStatus(tabId, 'downloading', 'Downloading images...');
-
     await downloadFile(result.zipData, result.filename);
 
-    // Success
-    const operation = operationsByTabId.get(tabId);
-    if (operation) {
-      operation.status = 'completed';
-      operation.result = {
-        filename: result.filename,
-        stats: result.stats
-      };
-
-      let successMsg = `Downloaded: ${result.filename} (${result.stats.sizeKB} KB, ${result.stats.imagesDownloaded} images)`;
-      if (result.stats.imagesFailed > 0) {
-        successMsg += ` - ${result.stats.imagesFailed} failed`;
-      }
-      operation.message = successMsg;
-
-      broadcastStatus(tabId);
-    }
-    resetOperation(tabId);
+    // Handle success
+    handleOperationSuccess(tabId, result, 'images');
 
   } catch (error) {
-    let errorMessage = error.message;
-
-    if (error.message.includes('Cannot access') ||
-        error.message.includes('Cannot read') ||
-        error.message.includes('No tab')) {
-      errorMessage = 'Cannot access this page. Try a different webpage.';
-    } else if (error.message.includes('Script execution failed') ||
-               error.message.includes('No frame with id')) {
-      errorMessage = 'Could not run extraction script. The page may be restricted.';
-    }
-
-    const operation = operationsByTabId.get(tabId);
-    if (operation) {
-      operation.status = 'error';
-      operation.error = errorMessage;
-      operation.message = errorMessage;
-      broadcastStatus(tabId);
-    }
-    resetOperation(tabId);
+    handleOperationError(error, tabId, 'images');
   }
 }
 
